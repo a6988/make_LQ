@@ -120,7 +120,8 @@ def draw_LQ(change_flow : float, normal_LQ_coef: dict, rain_LQ_coef: dict,
     rain_load = [ rain_LQ_coef['a'] * f ** rain_LQ_coef['b'] for f in rain_flow]
 
     with plt.style.context(('equal_hw')):
-        fig, ax = plt.subplots()
+        fig = plt.figure()
+        ax = fig.add_subplot()
         # L-Q式の記述
         ## 平常時
         ax.plot(norm_flow,norm_load,color='mediumblue',label='平常時L-Q')
@@ -140,6 +141,8 @@ def draw_LQ(change_flow : float, normal_LQ_coef: dict, rain_LQ_coef: dict,
             
     save_file = './L-Qfig/L-Qfig_{0}_{1}.png'.format(this_target_river, this_nut)
     plt.savefig(save_file)
+    plt.clf()
+    plt.close()
     #plt.show()
 
 # L-Qの条件ファイル
