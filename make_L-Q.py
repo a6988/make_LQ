@@ -82,6 +82,43 @@ def flow_get(this_target_river : str,
 
     return target_flow, max_flow, min_flow
     
+def cal_rainLQ(this_a, change_flow, this_b, target_flow, Lsum_all):
+    '''
+    出水時L-Qの作成
+    '''
+    ## 切り替え流量時の負荷(g/s)
+    change_L = this_a * change_flow ** this_b
+
+    # 平常時負荷量(g/year)の合計の取得
+    Lsum_norm = 0.0
+    ## 年間の内切り替え流量以下の流量を取得
+    target_flow_below_change_flow = target_flow[target_flow <= change_flow]
+    ## 平常時L-Q式を使用する。但しこの時g/sをg/hに変換するため3600を乗じる
+    for now_flow in target_flow_below_change_flow:
+        Lsum_norm += ( this_a * now_flow ** this_b ) * 3600
+
+    # 出水時L-Q式の取得
+    ## 出水時負荷量の取得(g/年)
+    Lsum_rain = Lsum_all - Lsum_norm
+    ## 出水時流量/change_flow
+    rain_flow_div = \
+            target_flow[target_flow > change_flow] / change_flow
+
+    ## 左辺の残差項
+    residue = Lsum_rain / ( change_L * 3600 )
+
+    ## bの算出
+    rain_b = newton_sol(rain_flow_div, residue)
+
+    ## aの算出
+    rain_a = change_L / ( change_flow ** rain_b )
+    ## 格納
+    rain_LQ_coef = {'a' : rain_a, 'b' : rain_b }
+
+    return rain_LQ_coef
+
+
+
 def check_LQ(target_flow : pd.Series, change_flow : float,
         normal_LQ_coef : list, rain_LQ_coef : list, Lsum_all : float) -> None:
     '''計算したL-Q式から負荷を算出する'''
@@ -143,7 +180,6 @@ def draw_LQ(change_flow : float, normal_LQ_coef: dict, rain_LQ_coef: dict,
     plt.savefig(save_file)
     plt.clf()
     plt.close()
-    #plt.show()
 
 # L-Qの条件ファイル
 condition_excel_file = 'L-Q計算設定ファイル.xlsx'
@@ -275,34 +311,7 @@ for this_target_river in target_river_list:
         ## 結果の格納
         normal_LQ_coef = { 'a' : this_a, 'b' : this_b }
 
-        ## 切り替え流量時の負荷(g/s)
-        change_L = this_a * change_flow ** this_b
-
-        # 平常時負荷量(g/year)の合計の取得
-        Lsum_norm = 0.0
-        ## 年間の内切り替え流量以下の流量を取得
-        target_flow_below_change_flow = target_flow[target_flow <= change_flow]
-        ## 平常時L-Q式を使用する。但しこの時g/sをg/hに変換するため3600を乗じる
-        for now_flow in target_flow_below_change_flow:
-            Lsum_norm += ( this_a * now_flow ** this_b ) * 3600
-
-        # 出水時L-Q式の取得
-        ## 出水時負荷量の取得(g/年)
-        Lsum_rain = Lsum_all - Lsum_norm
-        ## 出水時流量/change_flow
-        rain_flow_div = \
-                target_flow[target_flow > change_flow] / change_flow
-
-        ## 左辺の残差項
-        residue = Lsum_rain / ( change_L * 3600 )
-
-        ## bの算出
-        rain_b = newton_sol(rain_flow_div, residue)
-
-        ## aの算出
-        rain_a = change_L / ( change_flow ** rain_b )
-        ## 格納
-        rain_LQ_coef = {'a' : rain_a, 'b' : rain_b }
+        rain_LQ_coef = cal_rainLQ(this_a, change_flow, this_b, target_flow, Lsum_all)
 
         check_LQ(target_flow, change_flow, normal_LQ_coef, rain_LQ_coef, Lsum_all)
         #print('Lsum_norm : {0} g/year'.format(Lsum_norm ))
