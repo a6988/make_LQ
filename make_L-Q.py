@@ -143,6 +143,38 @@ def check_LQ(target_flow : pd.Series, change_flow : float,
     print('L-Qから算出した流出負荷量は{0}kg/年です.'.format(all_sum/1000))
     print('設定したブロック負荷量は{0}kg/年です.'.format(Lsum_all/1000))
 
+def draw_normalLQ(change_flow : float, normal_LQ_coef: dict,
+        this_target_river : str, this_nut: str, flow_and_nut: pd.DataFrame,
+        min_flow : float, max_flow : float,fig, ax ) -> None:
+    '''平常時のL-Qを表示'''
+
+    # L-Q式の設定
+    min_flow = min(min_flow, flow_and_nut[flow_col].min())
+    max_flow = max(max_flow, flow_and_nut[flow_col].max())
+    norm_flow = np.linspace(min_flow, change_flow, 10)
+    norm_load = [ normal_LQ_coef['a'] * f ** normal_LQ_coef['b'] for f in norm_flow]
+
+    # L-Q式の記述
+    ## 平常時
+    ax.plot(norm_flow,norm_load,color='mediumblue',label='平常時L-Q')
+    ## 出水時
+    # 平常時の観測値
+    ax.plot(flow_and_nut[flow_col],flow_and_nut['load(g/s)'],
+             'o', label = '平常時観測値', markeredgecolor = 'black',
+            markerfacecolor = 'white')
+    ax.set_xlabel("流量(" + r"$m^3/s$" + ")")
+    ax.set_ylabel("負荷量(g/s)")
+    ax.set_xscale('log')
+    ax.set_yscale('log')
+    ax.set_title("{0}({1})".format(this_target_river,this_nut))
+    ax.grid()
+    ax.legend(loc='upper left',fontsize=20)
+
+    return fig, ax
+            
+
+
+
 def draw_LQ(change_flow : float, normal_LQ_coef: dict, rain_LQ_coef: dict,
         this_target_river : str, this_nut: str, flow_and_nut: pd.DataFrame,
         min_flow : float, max_flow : float ) -> None:
@@ -317,11 +349,19 @@ for this_target_river in target_river_list:
         #print('Lsum_norm : {0} g/year'.format(Lsum_norm ))
         #print('Lsum_rain : {0} g/year'.format(Lsum_rain ))
 
-        draw_LQ(change_flow, normal_LQ_coef, rain_LQ_coef,
-                this_target_river, this_nut, flow_and_nut, min_flow, max_flow)
+        with plt.style.context(('equal_hw')):
+
+            fig = plt.figure()
+            ax = fig.add_subplot()
+            fig, ax = draw_normalLQ(change_flow, normal_LQ_coef, this_target_river, 
+                    this_nut, flow_and_nut, min_flow, max_flow,fig,ax)
 #        print('normal LQ a : {0}, b : {1}'.format(normal_LQ_coef['a'], normal_LQ_coef['b']))
 #        print('rain LQ a : {0}, b : {1}'.format(rain_LQ_coef['a'], rain_LQ_coef['b']))
 
+        save_file = './L-Qfig/L-Qfig_{0}_{1}.png'.format(this_target_river, this_nut)
+        plt.savefig(save_file)
+        plt.clf()
+        plt.close()
         # 結果の格納
         res[this_target_river][this_nut] = [normal_LQ_coef, rain_LQ_coef, 
                 Lsum_all / 1000 ] 
