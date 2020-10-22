@@ -167,51 +167,34 @@ def draw_normalLQ(change_flow : float, normal_LQ_coef: dict,
     ax.set_xscale('log')
     ax.set_yscale('log')
     ax.set_title("{0}({1})".format(this_target_river,this_nut))
-    ax.grid()
+    ax.grid(True)
     ax.legend(loc='upper left',fontsize=20)
 
     return fig, ax
             
-
-
-
-def draw_LQ(change_flow : float, normal_LQ_coef: dict, rain_LQ_coef: dict,
+def draw_rainLQ(change_flow : float, rain_LQ_coef: dict,
         this_target_river : str, this_nut: str, flow_and_nut: pd.DataFrame,
-        min_flow : float, max_flow : float ) -> None:
-    '''平常時と出水時のL-Qを表示'''
+        min_flow : float, max_flow : float,fig, ax ) -> None:
+    '''出水時のL-Qを表示'''
 
     # L-Q式の設定
     min_flow = min(min_flow, flow_and_nut[flow_col].min())
     max_flow = max(max_flow, flow_and_nut[flow_col].max())
-    norm_flow = np.linspace(min_flow, change_flow, 10)
-    norm_load = [ normal_LQ_coef['a'] * f ** normal_LQ_coef['b'] for f in norm_flow]
     rain_flow = np.linspace(change_flow,max_flow,10)
     rain_load = [ rain_LQ_coef['a'] * f ** rain_LQ_coef['b'] for f in rain_flow]
 
-    with plt.style.context(('equal_hw')):
-        fig = plt.figure()
-        ax = fig.add_subplot()
-        # L-Q式の記述
-        ## 平常時
-        ax.plot(norm_flow,norm_load,color='mediumblue',label='平常時L-Q')
-        ## 出水時
-        ax.plot(rain_flow,rain_load,color='crimson',label='出水時L-Q')
-        # 平常時の観測値
-        ax.plot(flow_and_nut[flow_col],flow_and_nut['load(g/s)'],
-                 'o', label = '平常時観測値', markeredgecolor = 'black',
-                markerfacecolor = 'white')
-        ax.set_xlabel("流量(" + r"$m^3/s$" + ")")
-        ax.set_ylabel("負荷量(g/s)")
-        ax.set_xscale('log')
-        ax.set_yscale('log')
-        ax.set_title("{0}({1})".format(this_target_river,this_nut))
-        ax.grid()
-        ax.legend(loc='upper left',fontsize=20)
+    # L-Q式の記述
+    ## 出水時
+    ax.plot(rain_flow,rain_load,color='crimson',label='出水時L-Q')
+    ax.set_xlabel("流量(" + r"$m^3/s$" + ")")
+    ax.set_ylabel("負荷量(g/s)")
+    ax.set_xscale('log')
+    ax.set_yscale('log')
+    ax.set_title("{0}({1})".format(this_target_river,this_nut))
+    ax.grid(True)
+    ax.legend(loc='upper left',fontsize=20)
             
-    save_file = './L-Qfig/L-Qfig_{0}_{1}.png'.format(this_target_river, this_nut)
-    plt.savefig(save_file)
-    plt.clf()
-    plt.close()
+    return fig, ax
 
 # L-Qの条件ファイル
 condition_excel_file = 'L-Q計算設定ファイル.xlsx'
@@ -355,6 +338,9 @@ for this_target_river in target_river_list:
             ax = fig.add_subplot()
             fig, ax = draw_normalLQ(change_flow, normal_LQ_coef, this_target_river, 
                     this_nut, flow_and_nut, min_flow, max_flow,fig,ax)
+            fig, ax = draw_rainLQ(change_flow, rain_LQ_coef, this_target_river, 
+                    this_nut, flow_and_nut, min_flow, max_flow,fig,ax)
+
 #        print('normal LQ a : {0}, b : {1}'.format(normal_LQ_coef['a'], normal_LQ_coef['b']))
 #        print('rain LQ a : {0}, b : {1}'.format(rain_LQ_coef['a'], rain_LQ_coef['b']))
 
