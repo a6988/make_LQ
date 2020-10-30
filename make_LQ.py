@@ -246,7 +246,7 @@ def main():
     TODO もともとのmainに相当する部分だが、これを関数にして可読性を上げる
     '''
     # L-Qの条件ファイル
-    condition_excel_file = 'L-Q計算設定ファイル.xlsx'
+    condition_excel_file = './data/L-Q計算設定ファイル.xlsx'
 
     # 設定を読み取る
     ## 設定が記載されたシート
@@ -430,7 +430,7 @@ if __name__ == '__main__':
 
 
     # L-Qの条件ファイル
-    condition_excel_file = 'L-Q計算設定ファイル.xlsx'
+    condition_excel_file = './data/L-Q計算設定ファイル.xlsx'
 
     # 設定を読み取る
     ## 設定が記載されたシート
