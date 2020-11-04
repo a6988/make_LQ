@@ -1,6 +1,8 @@
 import matplotlib.pyplot as plt
 import pandas as pd
 import datetime as dt
+import xlrd
+import readParams
 
 def getTargetFlow(flowFilename:str, thisUsecols:str,
         startDayStr:str, endDayStr:str):
@@ -18,8 +20,8 @@ def getTargetFlow(flowFilename:str, thisUsecols:str,
     flowData.drop(['年','月','日','時間','Date'],inplace=True,axis=1)
 
     # 対象期間のみに限定
-    startDay = dt.datetime.strptime(startDayStr, '%Y/%m/%d')
-    endDay = dt.datetime.strptime(endDayStr, '%Y/%m/%d')
+    startDay = dt.datetime.strptime(startDayStr, '%Y/%m/%d %H:%M')
+    endDay = dt.datetime.strptime(endDayStr, '%Y/%m/%d %H:%M')
     ## queryメソッド内で変数を使う時は@を付与する
     targetFlow = flowData.query(" index >= @startDay and index <= @endDay")
 
@@ -78,24 +80,34 @@ def makeFlowGraph(thisRiver, sortedFlow,stdDay):
 
     return 
 
-if __name__ == '__main__':
-    
-    
 
-    flowFilename = './data/〇河川流量データ_解析フォーマット対応.xlsx'
+def execCalStdFlow(conditionExcelFilename, settingSheetName):
+    '''
+    実行
+    '''
 
-    thisUsecols='A:N' # 入間川は含めていない
+    params = readParams.readParams(conditionExcelFilename, settingSheetName)
 
-    HeisuiOrHousui = 'Heisui'
-    makeFlowGraphFlag = True
-    startDayStr = '2016/4/1'
-    endDayStr = '2017/3/31'
+    flowFilename = params['flowFilename']
+    flowUseCols = params['flowUseCols']
+    HeisuiOrHousui = params['HeisuiOrHousui']
+    startDate = params['startDate']
+    endDate = params['endDate']
+    makeFlowGraphFlag = params['makeFlowGraphFlag']
 
-    targetFlow = getTargetFlow(flowFilename,thisUsecols, startDayStr, endDayStr)
-
-    
+    targetFlow = getTargetFlow(flowFilename,flowUseCols, startDate, endDate)
 
     stdFlows = calStdFlow(targetFlow, HeisuiOrHousui, makeFlowGraphFlag)
+    
+    return stdFlows
+
+
+if __name__ == '__main__':
+    
+    conditionExcelFilename = './data/L-Q計算設定ファイル.xlsx'
+    settingSheetName = '設定事項'
+    stdFlows = execCalStdFlow(conditionExcelFilename, settingSheetName)
+
     
 
 

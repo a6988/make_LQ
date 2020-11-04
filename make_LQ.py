@@ -6,6 +6,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import sys
+import calNormalFlow
 
 flow_col = '流量'
 def cal_normalLQ(params, this_target_river, this_nut, change_flow):
@@ -429,25 +430,29 @@ def main():
 if __name__ == '__main__':
 
 
-    # L-Qの条件ファイル
-    condition_excel_file = './data/L-Q計算設定ファイル.xlsx'
-
     # 設定を読み取る
+    ## L-Qの条件ファイル
+    conditionExcelFilename = './data/L-Q計算設定ファイル.xlsx'
     ## 設定が記載されたシート
-    setting_sheet_name = '設定事項'
+    settingSheetName = '設定事項'
+    params = readParams.readParams(conditionExcelFilename, settingSheetName)
+
     ## 設定事項のシートをオープン
-    setting_sheet = xlrd.open_workbook(condition_excel_file).\
-            sheet_by_name(setting_sheet_name)
+    #setting_sheet = xlrd.open_workbook(condition_excel_file).\
+    #        sheet_by_name(setting_sheet_name)
     ## 設定の読み取り
     ### cellは(0,0)が左上のセルになる
-    params = {}
-    params['load_term'] = setting_sheet.cell(1,1).value # 負荷合計期間
-    params['file_WQ']   = setting_sheet.cell(2,1).value # 水質ファイル
-    params['norm_LQ_term'] = setting_sheet.cell(3,1).value # 平常時L-Q作成対象期間
+    #params = {}
+    #params['load_term'] = setting_sheet.cell(1,1).value # 負荷合計期間
+    #params['file_WQ']   = setting_sheet.cell(2,1).value # 水質ファイル
+    #params['norm_LQ_term'] = setting_sheet.cell(3,1).value # 平常時L-Q作成対象期間
+
+    # 平常流量の読み取り
+    stdFlow = calNormalFlow.execCalStdFlow(conditionExcelFilename, settingSheetName)
 
     ## for debug
-    this_target_river = '鶴見川'
-    change_flow = 15.91
+    thisTargetRiver = '鶴見川'
+    change_flow = stdFlow[thisTargetRiver]
     this_nut = 'COD'
 
     normal_LQ_coef, flow_and_nut  = cal_normalLQ(params, this_target_river, this_nut, change_flow)
