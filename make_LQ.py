@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import sys
 import calNormalFlow
 import readParams
+import pprint
 
 # グローバル変数
 flowCol = '流量'
@@ -210,8 +211,10 @@ def check_LQ(target_flow : pd.Series, change_flow : float,
 
     print('normal_sum : {0} g/年'.format(normal_sum))
     print('rain_sum : {0} g/年'.format(rain_sum))
-    print('L-Qから算出した流出負荷量は{0}kg/年です.'.format(all_sum/1000))
-    print('設定したブロック負荷量は{0}kg/年です.'.format(Lsum_all/1000))
+    print('L-Qから算出した流出負荷量は{0}kg/日です.'.format(
+        round(all_sum/1000/365),3))
+    print('設定したブロック負荷量は{0}kg/日です.'.format(
+        round(Lsum_all/1000/365,3)))
 
 def draw_LQ(change_flow : float, normal_LQ_coef: dict, rain_LQ_coef: dict,
         this_target_river : str, this_nut: str, flow_and_nut: pd.DataFrame,
@@ -545,13 +548,19 @@ if __name__ == '__main__':
             # 平常時LQの作成
             normalLQCoef = calNormalLQ(params, thisTargetRiver, thisNut, changeFlow)
 
-            #print('a={}\n'.format(normalLQCoef['a']))
-            #print('b={}\n'.format(normalLQCoef['b']))
-
             # 出水時LQの作成
             rainLQCoef,allLoadSum = calRainLQ(thisNut, thisTargetRiver, thisTargetFlow, 
                     params, nutLoadPd, changeFlow, normalLQCoef)
-            
+
+            # 結果表示
+            print('河川名:{}'.format(thisTargetRiver))
+            print('平常時')
+            pprint.pprint(normalLQCoef)
+            print('出水時')
+            pprint.pprint(rainLQCoef)
+
+            #print('a={}\n'.format(normalLQCoef['a']))
+            #print('b={}\n'.format(normalLQCoef['b']))
     
             # LQから算出した負荷量と設定値が合致するかの確認
             check_LQ(thisTargetFlow, changeFlow, normalLQCoef, rainLQCoef, allLoadSum)
