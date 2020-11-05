@@ -77,6 +77,7 @@ def makeFlowGraph(thisRiver, sortedFlow,stdDay):
     ax.grid()
     fig.savefig('./res/flow/{}.png'.format(thisRiver),bbox_inches='tight')
     plt.clf()
+    plt.close()
 
     return 
 

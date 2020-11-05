@@ -7,8 +7,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import sys
 import calNormalFlow
+import readParams
 
-flow_col = '流量'
+flowCol = '流量'
 def cal_normalLQ(params, this_target_river, this_nut, change_flow):
     '''
     平常時L-Q式の作成
@@ -16,41 +17,40 @@ def cal_normalLQ(params, this_target_river, this_nut, change_flow):
     # 水質観測値の読み込み
     obs_skiprows = 17
     ## 観測値の読み込み。sheet_nameはtarget_riverと一致していることを想定
-    obs_pd = pd.read_excel(io=params['file_WQ'],sheet_name = this_target_river,
+    obs_pd = pd.read_excel(io=params['WQFilename'],sheet_name = this_target_river,
             skiprows = obs_skiprows)
     ## シート上の列名とnutコードの対応を付ける
-    nut_col_on_obs_pd = {'COD':'COD','TN':'全窒素','TP':'全リン'}
-    this_nut_col_name = nut_col_on_obs_pd[this_nut]
+    nutColOnObsPd = {'COD':'COD','TN':'全窒素','TP':'全リン'}
+    thisNutColName = nutColOnObsPd[this_nut]
     ## 流量が格納された列名
-    flow_col = '流量'
     # 負荷のための流量合計期間の設定
-    load_term = params['load_term'].split('-')
+    load_term = params['loadFlowTargetDate'].split('-')
     # 平常時水質L-Q作成期間
-    norm_LQ_term = params['norm_LQ_term'].split('-')
+    normLQterm = params['normalLQTargetDate'].split('-')
     ## データを平常時L-Q期間に限定
-    norm_LQ_limited = obs_pd[(obs_pd['Date'] >= norm_LQ_term[0]) & 
-            (obs_pd['Date'] <= norm_LQ_term[1])]
+    normLQLimited = obs_pd[(obs_pd['Date'] >= normLQterm[0]) & 
+            (obs_pd['Date'] <= normLQterm[1])]
 
     ## 流量と濃度を抜き出す
-    flow_and_nut = norm_LQ_limited.loc[:,[flow_col,this_nut_col_name]]
+    flowAndNut = normLQLimited.loc[:,[flowCol,thisNutColName]]
 
     # 負荷量(g/s)を算出
-    flow_and_nut['load(g/s)'] = flow_and_nut[flow_col] * \
-            flow_and_nut[this_nut_col_name]
-    flow_and_nut.dropna(how='any',inplace=True) # 欠測値を含む行を削除
-    this_load = flow_and_nut['load(g/s)']
-    this_flow = flow_and_nut[flow_col]
+    flowAndNut['load(g/s)'] = flowAndNut[flowCol] * \
+            flowAndNut[thisNutColName]
+    flowAndNut.dropna(how='any',inplace=True) # 欠測値を含む行を削除
+    thisLoad = flowAndNut['load(g/s)']
+    thisFlow = flowAndNut[flowCol]
 
     # 回帰式の作成。logをとって1次式として扱う
-    this_x = np.log10(this_flow)
-    this_y = np.log10(this_load)
+    this_x = np.log10(thisFlow)
+    this_y = np.log10(thisLoad)
     coefs = np.polyfit(this_x,this_y,1)
     this_b = coefs[0]
     this_a = 10**(coefs[1])
     ## 結果の格納
-    normal_LQ_coef = { 'a' : this_a, 'b' : this_b }
+    normalLQCoef = { 'a' : this_a, 'b' : this_b }
 
-    return normal_LQ_coef, flow_and_nut
+    return normalLQCoef, flowAndNut
 
 
 def output_res(target_river_list: list, nut_list: list, res: dict) -> None:
@@ -158,8 +158,8 @@ def draw_LQ(change_flow : float, normal_LQ_coef: dict, rain_LQ_coef: dict,
     '''平常時と出水時のL-Qを表示'''
 
     # L-Q式の設定
-    min_flow = min(min_flow, flow_and_nut[flow_col].min())
-    max_flow = max(max_flow, flow_and_nut[flow_col].max())
+    min_flow = min(min_flow, flow_and_nut[flowCol].min())
+    max_flow = max(max_flow, flow_and_nut[flowCol].max())
     norm_flow = np.linspace(min_flow, change_flow, 10)
     norm_load = [ normal_LQ_coef['a'] * f ** normal_LQ_coef['b'] for f in norm_flow]
     rain_flow = np.linspace(change_flow,max_flow,10)
@@ -173,7 +173,7 @@ def draw_LQ(change_flow : float, normal_LQ_coef: dict, rain_LQ_coef: dict,
         ## 出水時
         ax.plot(rain_flow,rain_load,color='crimson',label='出水時L-Q')
         # 平常時の観測値
-        ax.plot(flow_and_nut[flow_col],flow_and_nut['load(g/s)'],
+        ax.plot(flow_and_nut[flowCol],flow_and_nut['load(g/s)'],
                  'o', label = '平常時観測値', markeredgecolor = 'black',
                 markerfacecolor = 'white')
         ax.set_xlabel("流量(" + r"$m^3/s$" + ")")
@@ -197,14 +197,14 @@ def draw_LQ_normal(ax, change_flow, normal_LQ_coef, flow_and_nut,
     # 平常時観測のある流量の最小値
     ## TODO 実際に使用する流量が整備できれば以下のコメントを消して次の行を消す
     # min_flow = min(min_flow, flow_and_nut[flow_col].min())
-    min_flow = flow_and_nut[flow_col].min()
+    min_flow = flow_and_nut[flowCol].min()
     # 平常時L-Qに従った流量と負荷の線を作成する
     norm_flow = np.linspace(min_flow, change_flow, 10)
     norm_load = [ normal_LQ_coef['a'] * f ** normal_LQ_coef['b'] for f in norm_flow]
 
 
     ax.plot(norm_flow,norm_load,color='mediumblue',label='平常時L-Q')
-    ax.plot(flow_and_nut[flow_col],flow_and_nut['load(g/s)'],
+    ax.plot(flow_and_nut[flowCol],flow_and_nut['load(g/s)'],
              'o', label = '平常時観測値', markeredgecolor = 'black',
             markerfacecolor = 'white')
     ax.set_xlabel("流量(" + r"$m^3/s$" + ")")
@@ -212,6 +212,10 @@ def draw_LQ_normal(ax, change_flow, normal_LQ_coef, flow_and_nut,
     ax.set_xscale('log')
     ax.set_yscale('log')
     ax.set_title("{0}({1})".format(this_target_river,this_nut))
+    #x = 6
+    #y = 20
+    #ax.text(x,y,r"$y={{0}}x^{{1}}$".format(round(normal_LQ_coef['a'],3),
+    #    round(normal_LQ_coef['b'],3)))
     ax.grid()
     ax.legend(loc='upper left',fontsize=20)
 
@@ -223,7 +227,7 @@ def draw_rainLQ(change_flow : float, rain_LQ_coef: dict,
     '''出水時のL-Qを表示'''
 
     # L-Q式の設定
-    max_flow = max(max_flow, flow_and_nut[flow_col].max())
+    max_flow = max(max_flow, flow_and_nut[flowCol].max())
     rain_flow = np.linspace(change_flow,max_flow,10)
     rain_load = [ rain_LQ_coef['a'] * f ** rain_LQ_coef['b'] for f in rain_flow]
 
@@ -268,9 +272,9 @@ def main():
         sheet_name=target_river_sheet_name,skiprows=0)['対象河川'])
 
     # 負荷のための流量合計期間の設定
-    load_term = params['load_term'].split('-')
+    load_term = params['load_term']
     # 平常時水質L-Q作成期間
-    norm_LQ_term = params['norm_LQ_term'].split('-')
+    norm_LQ_term = params['norm_LQ_term']
 
     # 栄養塩ループ用リスト
     nut_list = ['COD','TN','TP']
@@ -347,7 +351,7 @@ def main():
 
             ## 流量の列名
             # TODO 新しいファイルの流量の列名が以下と一致しているか確認
-            flow_col = '流量'
+            #flowCol = '流量'
 
             ## 平常時L-Q期間に限定
             # TODO Dateの列を作成しているか確認
@@ -355,19 +359,19 @@ def main():
                     (obs_pd['Date'] <= norm_LQ_term[1])]
 
             ## 流量と濃度を抜き出す
-            flow_and_nut = norm_LQ_limited.loc[:,[flow_col,this_nut_col_name]]
+            flow_and_nut = norm_LQ_limited.loc[:,[flowCol,this_nut_col_name]]
             ## 切り替え流量の取得(平常時観測値の最大値)
             ## dropna()を行う前にすることで、対象期間中
             ## 公共用水域観測が行われたことのある最大流量を設定している
             ## TODO 切り替え流量は平水流量などで設定するので、引数に設定する
-            change_flow = flow_and_nut[flow_col].max()
+            change_flow = flow_and_nut[flowCol].max()
 
             ## 負荷量(g/s)を算出
-            flow_and_nut['load(g/s)'] = flow_and_nut[flow_col] * \
+            flow_and_nut['load(g/s)'] = flow_and_nut[flowCol] * \
                     flow_and_nut[this_nut_col_name]
             flow_and_nut.dropna(how='any',inplace=True) # 欠測値を含む行を削除
             this_load = flow_and_nut['load(g/s)']
-            this_flow = flow_and_nut[flow_col]
+            this_flow = flow_and_nut[flowCol]
             ## 回帰式を作成。logをとって1次式として扱う
             this_x = np.log10(this_flow)
             this_y = np.log10(this_load)
@@ -452,20 +456,21 @@ if __name__ == '__main__':
 
     ## for debug
     thisTargetRiver = '鶴見川'
-    change_flow = stdFlow[thisTargetRiver]
-    this_nut = 'COD'
+    changeFlow = stdFlow[thisTargetRiver]
+    thisNut = 'COD'
 
-    normal_LQ_coef, flow_and_nut  = cal_normalLQ(params, this_target_river, this_nut, change_flow)
+    # 平常時LQの作成
+    normalLQCoef, flowAndNut  = cal_normalLQ(params, thisTargetRiver, thisNut, changeFlow)
 
-    print('a={}\n'.format(normal_LQ_coef['a']))
-    print('b={}\n'.format(normal_LQ_coef['b']))
+    print('a={}\n'.format(normalLQCoef['a']))
+    print('b={}\n'.format(normalLQCoef['b']))
 
     plt.style.use('equal_hw')
 
     fig = plt.figure()
     ax = fig.add_subplot(111)
 
-    ax = draw_LQ_normal(ax, change_flow, normal_LQ_coef, flow_and_nut,
-            this_target_river, this_nut)
+    ax = draw_LQ_normal(ax, changeFlow, normalLQCoef, flowAndNut,
+            thisTargetRiver, thisNut)
 
     plt.show()
