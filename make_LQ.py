@@ -430,6 +430,12 @@ def main():
     # 結果の出力
     output_res(target_river_list, nut_list, res)
 
+    
+    
+
+
+
+
 
 if __name__ == '__main__':
 
@@ -440,6 +446,11 @@ if __name__ == '__main__':
     ## 設定が記載されたシート
     settingSheetName = '設定事項'
     params = readParams.readParams(conditionExcelFilename, settingSheetName)
+
+    # 対象河川名のリストを取得
+    targetRiverSheetName = '処理対象河川'
+    targetRiverNames = readParams.getTargetRiver(conditionExcelFilename, targetRiverSheetName)
+
 
     ## 設定事項のシートをオープン
     #setting_sheet = xlrd.open_workbook(condition_excel_file).\
@@ -455,22 +466,24 @@ if __name__ == '__main__':
     stdFlow = calNormalFlow.execCalStdFlow(conditionExcelFilename, settingSheetName)
 
     ## for debug
-    thisTargetRiver = '鶴見川'
+    targetRiverNames = ['鶴見川']
     changeFlow = stdFlow[thisTargetRiver]
     thisNut = 'COD'
 
+    for thisTargetRiver in targetRiverNames:
     # 平常時LQの作成
-    normalLQCoef, flowAndNut  = cal_normalLQ(params, thisTargetRiver, thisNut, changeFlow)
+        normalLQCoef, flowAndNut  = cal_normalLQ(params, thisTargetRiver, thisNut, changeFlow)
 
-    print('a={}\n'.format(normalLQCoef['a']))
-    print('b={}\n'.format(normalLQCoef['b']))
+        print('a={}\n'.format(normalLQCoef['a']))
+        print('b={}\n'.format(normalLQCoef['b']))
 
-    plt.style.use('equal_hw')
+        plt.style.use('equal_hw')
 
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
 
-    ax = draw_LQ_normal(ax, changeFlow, normalLQCoef, flowAndNut,
-            thisTargetRiver, thisNut)
+        ax = draw_LQ_normal(ax, changeFlow, normalLQCoef, flowAndNut,
+                thisTargetRiver, thisNut)
 
-    plt.show()
+        plt.show()
+        plt.close()

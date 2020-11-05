@@ -38,3 +38,30 @@ def readParams(conditionExcelFilename:str,settingSheetName:str)->str:
     params['endDate'] = params['loadFlowTargetDate'].split('-')[1].strip()
 
     return params
+
+def getTargetRiver(conditionExcelFilename, targetRiverSheetName):
+    '''
+    対象河川名のリストを取得
+    '''
+    
+    riverData = xlrd.open_workbook(conditionExcelFilename).\
+            sheet_by_name(targetRiverSheetName)
+
+    # 名前の取得。一行目は対象河川というタイトルが入っているので除外
+    targetRiverNames = riverData.col_values(0)[1:]
+
+    # 空白要素の削除
+    targetRiverNames = [thisItem for thisItem in targetRiverNames if thisItem != '']
+
+    # 名前の重複がないかの判定
+    if len(targetRiverNames) != len(set(targetRiverNames)):
+
+        raise Exception('同じ河川名が定義されています')
+
+    return targetRiverNames
+
+if __name__ == '__main__':
+
+    conditionExcelFilename = './data/L-Q計算設定ファイル.xlsx'
+    targetRiverSheetName = '処理対象河川'
+    targetRiverNames = getTargetRiver(conditionExcelFilename, targetRiverSheetName)
