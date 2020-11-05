@@ -5,7 +5,7 @@ import xlrd
 import readParams
 
 def getTargetFlow(flowFilename:str, thisUsecols:str,
-        startDayStr:str, endDayStr:str):
+        startDayStr:str, endDayStr:str)->pd.DataFrame:
     '''
     使用する流量のdataFrameを返す
     '''
@@ -23,6 +23,8 @@ def getTargetFlow(flowFilename:str, thisUsecols:str,
     startDay = dt.datetime.strptime(startDayStr, '%Y/%m/%d %H:%M')
     endDay = dt.datetime.strptime(endDayStr, '%Y/%m/%d %H:%M')
     ## queryメソッド内で変数を使う時は@を付与する
+    ## startDay, endDayはloadFlowTargetDateから算出しているので
+    ## 負荷量対象期間に限定している
     targetFlow = flowData.query(" index >= @startDay and index <= @endDay")
 
     return targetFlow
@@ -81,10 +83,25 @@ def makeFlowGraph(thisRiver, sortedFlow,stdDay):
 
     return 
 
+def getTargetFlowForCalRainLQ(params):
+    '''
+    出水時LQを計算するために必要な流量を取得する一連の操作の実行
+    '''
+
+    flowFilename = params['flowFilename']
+    flowUseCols = params['flowUseCols']
+    startDate = params['startDate']
+    endDate = params['endDate']
+    makeFlowGraphFlag = params['makeFlowGraphFlag']
+
+    # 負荷のための流量合計期間の設定
+    targetFlow = getTargetFlow(flowFilename,flowUseCols, startDate, endDate)
+
+    return targetFlow
 
 def execCalStdFlow(conditionExcelFilename, settingSheetName):
     '''
-    実行
+    平常流量を計算する一連の操作を実行
     '''
 
     params = readParams.readParams(conditionExcelFilename, settingSheetName)
@@ -92,13 +109,12 @@ def execCalStdFlow(conditionExcelFilename, settingSheetName):
     flowFilename = params['flowFilename']
     flowUseCols = params['flowUseCols']
     HeisuiOrHousui = params['HeisuiOrHousui']
+    makeFlowGraphFlag = params['makeFlowGraphFlag']
     startDate = params['startDate']
     endDate = params['endDate']
-    makeFlowGraphFlag = params['makeFlowGraphFlag']
 
     targetFlow = getTargetFlow(flowFilename,flowUseCols, startDate, endDate)
-
-    stdFlows = calStdFlow(targetFlow, HeisuiOrHousui, makeFlowGraphFlag)
+    stdFlows = calStdFlow(targetFlow, HeisuiOrHousui,makeFlowGraphFlag)
     
     return stdFlows
 

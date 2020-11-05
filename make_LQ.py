@@ -9,8 +9,12 @@ import sys
 import calNormalFlow
 import readParams
 
+# グローバル変数
 flowCol = '流量'
-def cal_normalLQ(params, this_target_river, this_nut, change_flow):
+# 栄養塩の種類
+nutList = ['COD','TN','TP']
+
+def calNormalLQ(params, this_target_river, this_nut, change_flow):
     '''
     平常時L-Q式の作成
     '''
@@ -50,7 +54,64 @@ def cal_normalLQ(params, this_target_river, this_nut, change_flow):
     ## 結果の格納
     normalLQCoef = { 'a' : this_a, 'b' : this_b }
 
-    return normalLQCoef, flowAndNut
+    return normalLQCoef
+
+def calRainLQ(thisNut, thisTargetRiver, thisTargetFlow, params, nutLoadPd, 
+        changeFlow, normalLQCoef):
+    '''
+    出水時L-Qを作成する
+    '''
+    ## 対象河川の流量、最大流量、最小流量を取得
+    #target_flow, max_flow, min_flow = flow_get(this_target_river,flow_pd_limited)
+
+    # 負荷量の取得
+    ## kg/日 -> g/年 に変換
+    allLoadSum = nutLoadPd.loc[thisTargetRiver,thisNut] * 365 * 1000
+
+    # 切り替え流量時の負荷の算出
+    changeLoad = normalLQCoef['a'] * changeFlow ** normalLQCoef['b']
+
+    # 平常時の負荷量合計の算出
+    ## 平常時の流量
+    targetFlowOfNormalFlow = thisTargetFlow[thisTargetFlow <= changeFlow]
+    ## 平常時の負荷
+    ## 平常時L-Q式を使用する。但しこの時g/sをg/hに変換するため3600を乗じる
+    targetFlowOfNormalLoad = targetFlowOfNormalFlow.apply(
+            lambda x : normalLQCoef['a'] * x ** normalLQCoef['b']) * 3600
+    normalLoadSum = targetFlowOfNormalLoad.sum()
+
+    # 出水時LQの取得
+    # 出水時の負荷量の合計
+    rainLoadSum = allLoadSum - normalLoadSum
+    ## 出水時の流量
+    targetFlowOfRainFlow = thisTargetFlow[thisTargetFlow > changeFlow]
+    ## 係数の計算
+    rainLQCoef = calRainCoef(rainLoadSum,targetFlowOfRainFlow,
+            changeFlow,changeLoad)
+
+
+    return rainLQCoef, allLoadSum
+    
+def calRainCoef(rainLoadSum,targetFlowOfRainFlow,changeFlow,changeLoad):
+    '''
+    出水時のLQ係数aとbを算出する
+    '''
+    rainFlowDiv = \
+            targetFlowOfRainFlow[targetFlowOfRainFlow > changeFlow] / changeFlow
+
+    ## 左辺の残差項
+    residue = rainLoadSum / ( changeLoad * 3600 )
+
+    ## bの算出
+    rain_b = newton_sol(rainFlowDiv, residue)
+
+    ## aの算出
+    rain_a = changeLoad / ( changeFlow ** rain_b )
+    ## 格納
+    rainLQCoef = {'a' : rain_a, 'b' : rain_b }
+
+    return rainLQCoef
+
 
 
 def output_res(target_river_list: list, nut_list: list, res: dict) -> None:
@@ -451,39 +512,59 @@ if __name__ == '__main__':
     targetRiverSheetName = '処理対象河川'
     targetRiverNames = readParams.getTargetRiver(conditionExcelFilename, targetRiverSheetName)
 
-
-    ## 設定事項のシートをオープン
-    #setting_sheet = xlrd.open_workbook(condition_excel_file).\
-    #        sheet_by_name(setting_sheet_name)
-    ## 設定の読み取り
-    ### cellは(0,0)が左上のセルになる
-    #params = {}
-    #params['load_term'] = setting_sheet.cell(1,1).value # 負荷合計期間
-    #params['file_WQ']   = setting_sheet.cell(2,1).value # 水質ファイル
-    #params['norm_LQ_term'] = setting_sheet.cell(3,1).value # 平常時L-Q作成対象期間
+    # 負荷量対象期間の流量を取得
+    targetFlow = calNormalFlow.getTargetFlowForCalRainLQ(params)
 
     # 平常流量の読み取り
-    stdFlow = calNormalFlow.execCalStdFlow(conditionExcelFilename, settingSheetName)
+    stdFlows = calNormalFlow.execCalStdFlow(conditionExcelFilename, settingSheetName)
+
+    # 負荷量を取得
+    ## kg/日の単位で読み込むこと
+    print("注意！ファイル中の負荷量の単位は【kg/日】！")
+    nutLoadFilename = params['nutLoadFilename']
+    # index=0は河川名
+    nutLoadPd = pd.read_excel(nutLoadFilename,index_col=0)
+
 
     ## for debug
     targetRiverNames = ['鶴見川']
-    changeFlow = stdFlow[thisTargetRiver]
-    thisNut = 'COD'
+    nutList = ['COD']
+
+
 
     for thisTargetRiver in targetRiverNames:
-    # 平常時LQの作成
-        normalLQCoef, flowAndNut  = cal_normalLQ(params, thisTargetRiver, thisNut, changeFlow)
 
-        print('a={}\n'.format(normalLQCoef['a']))
-        print('b={}\n'.format(normalLQCoef['b']))
+        ## この河川の流量
+        thisTargetFlow = targetFlow[thisTargetRiver]
 
-        plt.style.use('equal_hw')
+        for thisNut in nutList:
 
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
+            # 切り替え流量の取得
+            changeFlow = stdFlows[thisTargetRiver]
 
-        ax = draw_LQ_normal(ax, changeFlow, normalLQCoef, flowAndNut,
-                thisTargetRiver, thisNut)
+            # 平常時LQの作成
+            normalLQCoef = calNormalLQ(params, thisTargetRiver, thisNut, changeFlow)
 
-        plt.show()
-        plt.close()
+            #print('a={}\n'.format(normalLQCoef['a']))
+            #print('b={}\n'.format(normalLQCoef['b']))
+
+            # 出水時LQの作成
+            rainLQCoef,allLoadSum = calRainLQ(thisNut, thisTargetRiver, thisTargetFlow, 
+                    params, nutLoadPd, changeFlow, normalLQCoef)
+            
+    
+            # LQから算出した負荷量と設定値が合致するかの確認
+            check_LQ(thisTargetFlow, changeFlow, normalLQCoef, rainLQCoef, allLoadSum)
+
+
+
+            #plt.style.use('equal_hw')
+
+            #fig = plt.figure()
+            #ax = fig.add_subplot(111)
+
+            #ax = draw_LQ_normal(ax, changeFlow, normalLQCoef, flowAndNut,
+            #        thisTargetRiver, thisNut)
+
+            #plt.show()
+            #plt.close()
