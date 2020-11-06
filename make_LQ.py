@@ -5,6 +5,7 @@ import xlrd
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 import sys
 import calNormalFlow
 import readParams
@@ -14,6 +15,9 @@ import pprint
 flowCol = '流量'
 # 栄養塩の種類
 nutList = ['COD','TN','TP']
+# 保存先
+## LQ図
+LQdir = './res/LQ'
 
 def calNormalLQ(params, this_target_river, this_nut, change_flow):
     '''
@@ -263,7 +267,17 @@ def drawLQNormal(ax, thresFlows, normalLQCoef, flowAndNutObs,
     normLoad = [ normalLQCoef['a'] * f ** normalLQCoef['b'] for f in normFlow]
 
     # 平常時L-Qに基づく線
-    ax.plot(normFlow,normLoad,color='mediumblue',label='平常時L-Q')
+    ## LQ式のラベル設定(TeXの{}をエスケープするためにf(python3.6以降)を使う
+    ## f文の中では、{var}で変数varの値を用いることができる
+    ## 特殊文字{}や\は二つ重ねることで一つのその文字となる
+    ## {}はTeXでシステム的に用いられる文字で例えば上付き^{var}のように使う。
+    ## {}の中に変数を用いたい時には、まず{{}}として{をエスケープする
+    ## その上で、変数を使うために{var}とする。
+    ## 結果として^{{{var}}}のようにかっこが三つ連続することになる。
+    a = round(normalLQCoef['a'],3)
+    b = round(normalLQCoef['b'],3)
+    LQLabel = '平常時L-Q : ' + f'$y = {a} \\times x ^{{{b}}}$'
+    ax.plot(normFlow,normLoad,color='mediumblue',label=LQLabel)
     # 平常時観測値の描画
     ax.plot(flowAndNutObs[flowCol],flowAndNutObs['load(g/s)'],
              'o', label = '平常時観測値', markeredgecolor = 'black',
@@ -282,29 +296,64 @@ def drawLQNormal(ax, thresFlows, normalLQCoef, flowAndNutObs,
 
     return ax
 
-def draw_rainLQ(change_flow : float, rain_LQ_coef: dict,
-        this_target_river : str, this_nut: str, flow_and_nut: pd.DataFrame,
-        min_flow : float, max_flow : float, ax ) -> None:
-    '''出水時のL-Qを表示'''
+def drawLQRain(ax, thresFlows: dict, rainLQCoef: dict,
+        thisTargetRiver : str, thisNut: str):
+    '''
+    出水時のL-Qを描画
+    '''
 
     # L-Q式の設定
-    max_flow = max(max_flow, flow_and_nut[flowCol].max())
-    rain_flow = np.linspace(change_flow,max_flow,10)
-    rain_load = [ rain_LQ_coef['a'] * f ** rain_LQ_coef['b'] for f in rain_flow]
+    rainFlow = np.linspace(thresFlows['changeFlow'],thresFlows['maxFlow'],10)
+    rainLoad = [ rainLQCoef['a'] * f ** rainLQCoef['b'] for f in rainFlow]
 
     # L-Q式の記述
     ## 出水時
-    ax.plot(rain_flow,rain_load,color='crimson',label='出水時L-Q')
+    a = round(rainLQCoef['a'],3)
+    b = round(rainLQCoef['b'],3)
+    LQLabel = '出水時L-Q : ' + f'$y = {a} \\times x ^{{{b}}}$'
+    ax.plot(rainFlow,rainLoad,color='crimson',label=LQLabel)
     ax.set_xlabel("流量(" + r"$m^3/s$" + ")")
     ax.set_ylabel("負荷量(g/s)")
     ax.set_xscale('log')
     ax.set_yscale('log')
-    ax.set_title("{0}({1})".format(this_target_river,this_nut))
-    ax.grid(True)
-    ax.legend(loc='upper left',fontsize=20)
+    ax.set_title("{0}({1})".format(thisTargetRiver,thisNut))
             
     return ax
 
+def drawLQ(thresFlows, normalLQCoef, flowAndNutObs,
+        thisTargetRiver, thisNut):
+    '''
+    平常時と出水時のLQを描画する
+    '''
+    plt.style.use('equal_hw')
+    mpl.rcParams['figure.figsize']=(6,6)
+    
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    ## 平常時LQの描画
+    ax = drawLQNormal(ax, thresFlows, normalLQCoef, flowAndNutObs,
+            thisTargetRiver, thisNut)
+
+    ## 出水時LQの描画
+    ax = drawLQRain(ax, thresFlows, rainLQCoef,thisTargetRiver, thisNut)
+
+    # 全体の調整
+    ax.grid(True)
+    ax.grid(which='minor')
+
+    ## 凡例の順番を変更(平常時線、観測値、出水時線となるので
+    ## 平常時線、出水時線、観測値にする
+    hans, labs = ax.get_legend_handles_labels()
+    ### リストの交換
+    hans[1],hans[2] = hans[2],hans[1]
+    labs[1],labs[2] = labs[2],labs[1]
+    ax.legend(handles=hans,labels=labs,loc='upper left',fontsize='small')
+    # ax.set_xlim(thresFlows['minFlow'],thresFlows['maxFlow'])
+
+    plt.savefig(LQdir + '/LQ_' + thisTargetRiver + '_' + thisNut + '.png')
+    plt.close()
+    
+    return
 
 
 def main():
@@ -564,13 +613,6 @@ if __name__ == '__main__':
             check_LQ(thisTargetFlow, changeFlow, normalLQCoef, rainLQCoef, allLoadSum)
 
             # 描画
-            plt.style.use('equal_hw')
 
-            fig = plt.figure()
-            ax = fig.add_subplot(111)
-            ## 平常時LQの描画
-            ax = drawLQNormal(ax, thresFlows, normalLQCoef, flowAndNutObs,
+            drawLQ(thresFlows, normalLQCoef, flowAndNutObs,
                     thisTargetRiver, thisNut)
-
-            plt.show()
-            #plt.close()
