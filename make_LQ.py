@@ -37,14 +37,14 @@ def calNormalLQ(params, this_target_river, this_nut, change_flow):
             (obs_pd['Date'] <= normLQterm[1])]
 
     ## 流量と濃度を抜き出す
-    flowAndNut = normLQLimited.loc[:,[flowCol,thisNutColName]]
+    flowAndNutObs = normLQLimited.loc[:,[flowCol,thisNutColName]]
 
     # 負荷量(g/s)を算出
-    flowAndNut['load(g/s)'] = flowAndNut[flowCol] * \
-            flowAndNut[thisNutColName]
-    flowAndNut.dropna(how='any',inplace=True) # 欠測値を含む行を削除
-    thisLoad = flowAndNut['load(g/s)']
-    thisFlow = flowAndNut[flowCol]
+    flowAndNutObs['load(g/s)'] = flowAndNutObs[flowCol] * \
+            flowAndNutObs[thisNutColName]
+    flowAndNutObs.dropna(how='any',inplace=True) # 欠測値を含む行を削除
+    thisLoad = flowAndNutObs['load(g/s)']
+    thisFlow = flowAndNutObs[flowCol]
 
     # 回帰式の作成。logをとって1次式として扱う
     this_x = np.log10(thisFlow)
@@ -55,7 +55,7 @@ def calNormalLQ(params, this_target_river, this_nut, change_flow):
     ## 結果の格納
     normalLQCoef = { 'a' : this_a, 'b' : this_b }
 
-    return normalLQCoef
+    return normalLQCoef, flowAndNutObs 
 
 def calRainLQ(thisNut, thisTargetRiver, thisTargetFlow, params, nutLoadPd, 
         changeFlow, normalLQCoef):
@@ -252,36 +252,33 @@ def draw_LQ(change_flow : float, normal_LQ_coef: dict, rain_LQ_coef: dict,
     plt.savefig(save_file)
     #plt.show()
 
-def draw_LQ_normal(ax, change_flow, normal_LQ_coef, flow_and_nut, 
-        this_target_river, this_nut):
+def drawLQNormal(ax, thresFlows, normalLQCoef, flowAndNutObs,
+        thisTargetRiver, thisNut):
     '''
     平常時のLQを図示する
     '''
 
-    # 平常時観測のある流量の最小値
-    ## TODO 実際に使用する流量が整備できれば以下のコメントを消して次の行を消す
-    # min_flow = min(min_flow, flow_and_nut[flow_col].min())
-    min_flow = flow_and_nut[flowCol].min()
     # 平常時L-Qに従った流量と負荷の線を作成する
-    norm_flow = np.linspace(min_flow, change_flow, 10)
-    norm_load = [ normal_LQ_coef['a'] * f ** normal_LQ_coef['b'] for f in norm_flow]
+    normFlow = np.linspace(thresFlows['minFlow'], thresFlows['changeFlow'], 10)
+    normLoad = [ normalLQCoef['a'] * f ** normalLQCoef['b'] for f in normFlow]
 
-
-    ax.plot(norm_flow,norm_load,color='mediumblue',label='平常時L-Q')
-    ax.plot(flow_and_nut[flowCol],flow_and_nut['load(g/s)'],
+    # 平常時L-Qに基づく線
+    ax.plot(normFlow,normLoad,color='mediumblue',label='平常時L-Q')
+    # 平常時観測値の描画
+    ax.plot(flowAndNutObs[flowCol],flowAndNutObs['load(g/s)'],
              'o', label = '平常時観測値', markeredgecolor = 'black',
             markerfacecolor = 'white')
     ax.set_xlabel("流量(" + r"$m^3/s$" + ")")
     ax.set_ylabel("負荷量(g/s)")
     ax.set_xscale('log')
     ax.set_yscale('log')
-    ax.set_title("{0}({1})".format(this_target_river,this_nut))
+    ax.set_title("{0}({1})".format(thisTargetRiver,thisNut))
     #x = 6
     #y = 20
     #ax.text(x,y,r"$y={{0}}x^{{1}}$".format(round(normal_LQ_coef['a'],3),
     #    round(normal_LQ_coef['b'],3)))
-    ax.grid()
-    ax.legend(loc='upper left',fontsize=20)
+    #ax.grid()
+    #ax.legend(loc='upper left',fontsize=20)
 
     return ax
 
@@ -537,16 +534,20 @@ if __name__ == '__main__':
 
     for thisTargetRiver in targetRiverNames:
 
-        ## この河川の流量
+        # この河川の流量
         thisTargetFlow = targetFlow[thisTargetRiver]
+        ## 最大流量・最小流量・切り替え流量を取得 
+        maxFlow = thisTargetFlow.max()          # 最大流量
+        minFlow = thisTargetFlow.min()          # 最小流量
+        changeFlow = stdFlows[thisTargetRiver]  # 切り替え流量
+        ## 辞書型にしてパック
+        thresFlows = {'maxFlow':maxFlow,'minFlow':minFlow,'changeFlow':changeFlow}
 
         for thisNut in nutList:
 
-            # 切り替え流量の取得
-            changeFlow = stdFlows[thisTargetRiver]
 
             # 平常時LQの作成
-            normalLQCoef = calNormalLQ(params, thisTargetRiver, thisNut, changeFlow)
+            normalLQCoef,flowAndNutObs = calNormalLQ(params, thisTargetRiver, thisNut, changeFlow)
 
             # 出水時LQの作成
             rainLQCoef,allLoadSum = calRainLQ(thisNut, thisTargetRiver, thisTargetFlow, 
@@ -558,22 +559,18 @@ if __name__ == '__main__':
             pprint.pprint(normalLQCoef)
             print('出水時')
             pprint.pprint(rainLQCoef)
-
-            #print('a={}\n'.format(normalLQCoef['a']))
-            #print('b={}\n'.format(normalLQCoef['b']))
     
             # LQから算出した負荷量と設定値が合致するかの確認
             check_LQ(thisTargetFlow, changeFlow, normalLQCoef, rainLQCoef, allLoadSum)
 
+            # 描画
+            plt.style.use('equal_hw')
 
+            fig = plt.figure()
+            ax = fig.add_subplot(111)
+            ## 平常時LQの描画
+            ax = drawLQNormal(ax, thresFlows, normalLQCoef, flowAndNutObs,
+                    thisTargetRiver, thisNut)
 
-            #plt.style.use('equal_hw')
-
-            #fig = plt.figure()
-            #ax = fig.add_subplot(111)
-
-            #ax = draw_LQ_normal(ax, changeFlow, normalLQCoef, flowAndNut,
-            #        thisTargetRiver, thisNut)
-
-            #plt.show()
+            plt.show()
             #plt.close()
