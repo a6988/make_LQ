@@ -17,29 +17,47 @@ flowCol = '流量'
 nutList = ['COD','TN','TP']
 # 保存先
 ## LQ図
-LQdir = './res/LQ'
+resDir = './res'
+LQdir = resDir + '/LQ'
 
-def calNormalLQ(params, this_target_river, this_nut, change_flow):
+def getTargetObsData(params, thisTargetRiver):
     '''
-    平常時L-Q式の作成
+    対象期間の観測値のデータを取得する
     '''
     # 水質観測値の読み込み
     obs_skiprows = 17
     ## 観測値の読み込み。sheet_nameはtarget_riverと一致していることを想定
-    obs_pd = pd.read_excel(io=params['WQFilename'],sheet_name = this_target_river,
+    obs_pd = pd.read_excel(io=params['WQFilename'],sheet_name = thisTargetRiver,
             skiprows = obs_skiprows)
-    ## シート上の列名とnutコードの対応を付ける
-    nutColOnObsPd = {'COD':'COD','TN':'全窒素','TP':'全リン'}
-    thisNutColName = nutColOnObsPd[this_nut]
-    ## 流量が格納された列名
-    # 負荷のための流量合計期間の設定
-    load_term = params['loadFlowTargetDate'].split('-')
+
     # 平常時水質L-Q作成期間
     normLQterm = params['normalLQTargetDate'].split('-')
     ## データを平常時L-Q期間に限定
     normLQLimited = obs_pd[(obs_pd['Date'] >= normLQterm[0]) & 
             (obs_pd['Date'] <= normLQterm[1])]
 
+    return normLQLimited
+
+def getObsMaxFlow(params,thisTargetRiver):
+    '''
+    観測値における最大流量を取得する
+    '''
+
+    normLQLimited = getTargetObsData(params, thisTargetRiver)
+    obsMaxFlow = normLQLimited[flowCol].max()
+
+    return obsMaxFlow
+
+
+def calNormalLQ(params, this_target_river, this_nut, change_flow):
+    '''
+    平常時L-Q式の作成
+    '''
+    ## 観測値で対象期間のデータを取得
+    normLQLimited = getTargetObsData(params, thisTargetRiver)
+    ## シート上の列名とnutコードの対応を付ける
+    nutColOnObsPd = {'COD':'COD','TN':'全窒素','TP':'全リン'}
+    thisNutColName = nutColOnObsPd[this_nut]
     ## 流量と濃度を抜き出す
     flowAndNutObs = normLQLimited.loc[:,[flowCol,thisNutColName]]
 
@@ -110,8 +128,13 @@ def calRainCoef(rainLoadSum,targetFlowOfRainFlow,changeFlow,changeLoad):
     ## bの算出
     rain_b = newton_sol(rainFlowDiv, residue)
 
-    ## aの算出
-    rain_a = changeLoad / ( changeFlow ** rain_b )
+    # Noneは解が求められなかった時
+    if rain_b == None:
+        rain_a = None
+    else:
+        ## aの算出
+        rain_a = changeLoad / ( changeFlow ** rain_b )
+
     ## 格納
     rainLQCoef = {'a' : rain_a, 'b' : rain_b }
 
@@ -119,29 +142,21 @@ def calRainCoef(rainLoadSum,targetFlowOfRainFlow,changeFlow,changeLoad):
 
 
 
-def output_res(target_river_list: list, nut_list: list, res: dict) -> None:
+def output_res(targetRiverNames: list, nutList: list, res: dict) -> None:
     '''結果をcsvに出力'''
 
     # 結果の出力
-    res_file = 'res.csv'
+    res_file = resDir + './res.csv'
     with open(res_file, "w",encoding="shift-jis") as f:
 
-        f.write('河川,項目,平常時a,平常時b,出水時a,出水時b,切替流量,ブロック負荷\n')
+        f.write('河川,項目,平常時a,平常時b,出水時a,出水時b,切替流量\n')
 
-        for this_target_river in target_river_list:
+        for thisRow in res:
 
-            for this_nut in nut_list:
-                f.write("{0},{1},{2},{3},{4},{5}, \
-                        {6},{7}\n".format(
-                        this_target_river, \
-                        this_nut, \
-                        res[this_target_river][this_nut][0]['a'], \
-                        res[this_target_river][this_nut][0]['b'], \
-                        res[this_target_river][this_nut][1]['a'], \
-                        res[this_target_river][this_nut][1]['b'], \
-                        res[this_target_river]['change_flow'], \
-                        res[this_target_river][this_nut][2]
-                        ))
+            f.write("{},{},{},{},{},{},{}\n".format(
+                thisRow['河川名'],thisRow['項目'],thisRow['平常時a'],
+                thisRow['平常時b'],thisRow['出水時a'],thisRow['出水時b'],
+                thisRow['切替流量']))
 
 
 def newton_sol(rain_flow_div : pd.Series, residue : float) -> None:
@@ -180,81 +195,40 @@ def newton_sol(rain_flow_div : pd.Series, residue : float) -> None:
             return x0
         
     print('終了回数までに終わりませんでした。')
-    sys.exit()
+    return None
     
-
-
-def flow_get(this_target_river : str, 
-        flow_pd_limited : pd.DataFrame)-> (pd.DataFrame, float, float):
-    '''対象河川の期間中の流量、最大流量、最小流量を取得'''
-    
-    target_flow = flow_pd_limited.loc[:,this_target_river]
-    max_flow = target_flow.max()
-    min_flow = target_flow.min()
-
-    return target_flow, max_flow, min_flow
     
 def check_LQ(target_flow : pd.Series, change_flow : float,
         normal_LQ_coef : list, rain_LQ_coef : list, Lsum_all : float) -> None:
     '''計算したL-Q式から負荷を算出する'''
-
+    
     # 平常時の負荷量の算出(g/year)
     normal_flow = target_flow[target_flow <= change_flow]
     normal_load_sr = ( normal_LQ_coef['a'] * 
             normal_flow ** normal_LQ_coef['b'] ) * 3600
     normal_sum = normal_load_sr.sum() # g/year 
+    print('normal_sum : {0} kg/日'.format(normal_sum/1000/365))
 
-    # 出水時の負荷量の算出(g/year)
-    rain_flow = target_flow[target_flow > change_flow]
-    rain_load_sr = ( rain_LQ_coef['a'] * 
-            rain_flow ** rain_LQ_coef['b'] ) * 3600
-    rain_sum = rain_load_sr.sum() # g/year 
+    # 出水時の解が求まった場合
+    if not rain_LQ_coef['b'] == None:
+        # 出水時の負荷量の算出(g/year)
+        rain_flow = target_flow[target_flow > change_flow]
+        rain_load_sr = ( rain_LQ_coef['a'] * 
+                rain_flow ** rain_LQ_coef['b'] ) * 3600
+        rain_sum = rain_load_sr.sum() # g/year 
 
-    # L-Q式から算出した合計流出負荷量(kg/year)
-    all_sum = normal_sum + rain_sum
+        # L-Q式から算出した合計流出負荷量(kg/year)
+        all_sum = normal_sum + rain_sum
 
-    print('normal_sum : {0} g/年'.format(normal_sum))
-    print('rain_sum : {0} g/年'.format(rain_sum))
-    print('L-Qから算出した流出負荷量は{0}kg/日です.'.format(
-        round(all_sum/1000/365),3))
+        print('rain_sum : {0} kg/日'.format(rain_sum/1000/365))
+        print('L-Qから算出した流出負荷量は{0}kg/日です.'.format(
+            round(all_sum/1000/365),3))
+    # 求まらなかった場合
+    else:
+        print('出水時計算失敗')
+
     print('設定したブロック負荷量は{0}kg/日です.'.format(
         round(Lsum_all/1000/365,3)))
-
-def draw_LQ(change_flow : float, normal_LQ_coef: dict, rain_LQ_coef: dict,
-        this_target_river : str, this_nut: str, flow_and_nut: pd.DataFrame,
-        min_flow : float, max_flow : float ) -> None:
-    '''平常時と出水時のL-Qを表示'''
-
-    # L-Q式の設定
-    min_flow = min(min_flow, flow_and_nut[flowCol].min())
-    max_flow = max(max_flow, flow_and_nut[flowCol].max())
-    norm_flow = np.linspace(min_flow, change_flow, 10)
-    norm_load = [ normal_LQ_coef['a'] * f ** normal_LQ_coef['b'] for f in norm_flow]
-    rain_flow = np.linspace(change_flow,max_flow,10)
-    rain_load = [ rain_LQ_coef['a'] * f ** rain_LQ_coef['b'] for f in rain_flow]
-
-    with plt.style.context(('equal_hw')):
-        fig, ax = plt.subplots()
-        # L-Q式の記述
-        ## 平常時
-        ax.plot(norm_flow,norm_load,color='mediumblue',label='平常時L-Q')
-        ## 出水時
-        ax.plot(rain_flow,rain_load,color='crimson',label='出水時L-Q')
-        # 平常時の観測値
-        ax.plot(flow_and_nut[flowCol],flow_and_nut['load(g/s)'],
-                 'o', label = '平常時観測値', markeredgecolor = 'black',
-                markerfacecolor = 'white')
-        ax.set_xlabel("流量(" + r"$m^3/s$" + ")")
-        ax.set_ylabel("負荷量(g/s)")
-        ax.set_xscale('log')
-        ax.set_yscale('log')
-        ax.set_title("{0}({1})".format(this_target_river,this_nut))
-        ax.grid()
-        ax.legend(loc='upper left',fontsize=20)
-            
-    save_file = './L-Qfig/L-Qfig_{0}_{1}.png'.format(this_target_river, this_nut)
-    plt.savefig(save_file)
-    #plt.show()
 
 def drawLQNormal(ax, thresFlows, normalLQCoef, flowAndNutObs,
         thisTargetRiver, thisNut):
@@ -287,12 +261,6 @@ def drawLQNormal(ax, thresFlows, normalLQCoef, flowAndNutObs,
     ax.set_xscale('log')
     ax.set_yscale('log')
     ax.set_title("{0}({1})".format(thisTargetRiver,thisNut))
-    #x = 6
-    #y = 20
-    #ax.text(x,y,r"$y={{0}}x^{{1}}$".format(round(normal_LQ_coef['a'],3),
-    #    round(normal_LQ_coef['b'],3)))
-    #ax.grid()
-    #ax.legend(loc='upper left',fontsize=20)
 
     return ax
 
@@ -303,6 +271,9 @@ def drawLQRain(ax, thresFlows: dict, rainLQCoef: dict,
     '''
 
     # L-Q式の設定
+    ## 出水時係数bが計算できなかった時はそのまま終わる
+    if rainLQCoef['b'] == None:
+        return ax
     rainFlow = np.linspace(thresFlows['changeFlow'],thresFlows['maxFlow'],10)
     rainLoad = [ rainLQCoef['a'] * f ** rainLQCoef['b'] for f in rainFlow]
 
@@ -320,7 +291,7 @@ def drawLQRain(ax, thresFlows: dict, rainLQCoef: dict,
             
     return ax
 
-def drawLQ(thresFlows, normalLQCoef, flowAndNutObs,
+def drawLQ(thresFlows, normalLQCoef, rainLQCoef, flowAndNutObs,
         thisTargetRiver, thisNut):
     '''
     平常時と出水時のLQを描画する
@@ -334,21 +305,22 @@ def drawLQ(thresFlows, normalLQCoef, flowAndNutObs,
     ax = drawLQNormal(ax, thresFlows, normalLQCoef, flowAndNutObs,
             thisTargetRiver, thisNut)
 
-    ## 出水時LQの描画
-    ax = drawLQRain(ax, thresFlows, rainLQCoef,thisTargetRiver, thisNut)
+    if not rainLQCoef['b'] == None:
+        ## 出水時LQの描画
+        ax = drawLQRain(ax, thresFlows, rainLQCoef,thisTargetRiver, thisNut)
 
-    # 全体の調整
-    ax.grid(True)
-    ax.grid(which='minor')
+        # 全体の調整
+        ax.grid(True)
+        ax.grid(which='minor')
 
-    ## 凡例の順番を変更(平常時線、観測値、出水時線となるので
-    ## 平常時線、出水時線、観測値にする
-    hans, labs = ax.get_legend_handles_labels()
-    ### リストの交換
-    hans[1],hans[2] = hans[2],hans[1]
-    labs[1],labs[2] = labs[2],labs[1]
-    ax.legend(handles=hans,labels=labs,loc='upper left',fontsize='small')
-    # ax.set_xlim(thresFlows['minFlow'],thresFlows['maxFlow'])
+        ## 凡例の順番を変更(平常時線、観測値、出水時線となるので
+        ## 平常時線、出水時線、観測値にする
+        hans, labs = ax.get_legend_handles_labels()
+        ### リストの交換
+        hans[1],hans[2] = hans[2],hans[1]
+        labs[1],labs[2] = labs[2],labs[1]
+        ax.legend(handles=hans,labels=labs,loc='upper left',fontsize='small')
+        # ax.set_xlim(thresFlows['minFlow'],thresFlows['maxFlow'])
 
     plt.savefig(LQdir + '/LQ_' + thisTargetRiver + '_' + thisNut + '.png')
     plt.close()
@@ -576,10 +548,12 @@ if __name__ == '__main__':
 
 
     ## for debug
-    targetRiverNames = ['鶴見川']
-    nutList = ['COD']
+    #targetRiverNames = ['多摩川']
+    #targetRiverNames = targetRiverNames[1:]
+    #nutList = ['COD']
 
-
+    # 結果格納用
+    res = []
 
     for thisTargetRiver in targetRiverNames:
 
@@ -589,6 +563,10 @@ if __name__ == '__main__':
         maxFlow = thisTargetFlow.max()          # 最大流量
         minFlow = thisTargetFlow.min()          # 最小流量
         changeFlow = stdFlows[thisTargetRiver]  # 切り替え流量
+        ## 切り替え流量を観測値における最大流量とする方法
+        # obsMaxFlow = getObsMaxFlow(params, thisTargetRiver)
+        # changeFlow = obsMaxFlow
+
         ## 辞書型にしてパック
         thresFlows = {'maxFlow':maxFlow,'minFlow':minFlow,'changeFlow':changeFlow}
 
@@ -596,23 +574,34 @@ if __name__ == '__main__':
 
 
             # 平常時LQの作成
-            normalLQCoef,flowAndNutObs = calNormalLQ(params, thisTargetRiver, thisNut, changeFlow)
+            normalLQCoef,flowAndNutObs = calNormalLQ(params, thisTargetRiver, thisNut, thresFlows['changeFlow'])
 
             # 出水時LQの作成
             rainLQCoef,allLoadSum = calRainLQ(thisNut, thisTargetRiver, thisTargetFlow, 
-                    params, nutLoadPd, changeFlow, normalLQCoef)
+                    params, nutLoadPd, thresFlows['changeFlow'], normalLQCoef)
 
             # 結果表示
-            print('河川名:{}'.format(thisTargetRiver))
+            print(f'河川名:{thisTargetRiver}、項目:{thisNut}')
             print('平常時')
             pprint.pprint(normalLQCoef)
             print('出水時')
             pprint.pprint(rainLQCoef)
     
             # LQから算出した負荷量と設定値が合致するかの確認
-            check_LQ(thisTargetFlow, changeFlow, normalLQCoef, rainLQCoef, allLoadSum)
+            check_LQ(thisTargetFlow, thresFlows['changeFlow'], 
+                    normalLQCoef, rainLQCoef, allLoadSum)
 
             # 描画
-
-            drawLQ(thresFlows, normalLQCoef, flowAndNutObs,
+            drawLQ(thresFlows, normalLQCoef, rainLQCoef,flowAndNutObs,
                     thisTargetRiver, thisNut)
+
+            # 結果をファイルに格納
+            thisRiverRes = {'河川名':thisTargetRiver,
+                    '項目':thisNut,'平常時a':normalLQCoef['a'],
+                    '平常時b':normalLQCoef['b'],
+                    '出水時a':rainLQCoef['a'],
+                    '出水時b':rainLQCoef['b'],
+                    '切替流量':changeFlow}
+            res.append(thisRiverRes)    # 出力
+
+    output_res(targetRiverNames, nutList, res)
