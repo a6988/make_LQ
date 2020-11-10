@@ -49,7 +49,7 @@ def getObsMaxFlow(params,thisTargetRiver):
     return obsMaxFlow
 
 
-def calNormalLQ(params, this_target_river, this_nut, change_flow):
+def calNormalLQ(params, thisTargetRiver, thisNut, changeFlow):
     '''
     平常時L-Q式の作成
     '''
@@ -57,7 +57,7 @@ def calNormalLQ(params, this_target_river, this_nut, change_flow):
     normLQLimited = getTargetObsData(params, thisTargetRiver)
     ## シート上の列名とnutコードの対応を付ける
     nutColOnObsPd = {'COD':'COD','TN':'全窒素','TP':'全リン'}
-    thisNutColName = nutColOnObsPd[this_nut]
+    thisNutColName = nutColOnObsPd[thisNut]
     ## 流量と濃度を抜き出す
     flowAndNutObs = normLQLimited.loc[:,[flowCol,thisNutColName]]
 
