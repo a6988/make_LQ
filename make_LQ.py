@@ -544,8 +544,11 @@ if __name__ == '__main__':
     ## kg/日の単位で読み込むこと
     print("注意！ファイル中の負荷量の単位は【kg/日】！")
     nutLoadFilename = params['nutLoadFilename']
+    nutLoadSheetname = params['nutLoadSheetname']
     # index=0は河川名
-    nutLoadPd = pd.read_excel(nutLoadFilename,index_col=0)
+    # 使用する列は河川名、COD、TN、TPの4つの列とする
+    nutLoadPd = pd.read_excel(nutLoadFilename,index_col=0, 
+            use_col=[0,1,2,3], sheet_name = nutLoadSheetname)
 
 
     ## for debug

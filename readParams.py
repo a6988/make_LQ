@@ -14,8 +14,10 @@ def readParams(conditionExcelFilename:str,settingSheetName:str)->str:
     paramNamesCol = 1
     paramNamesInSettingData = setting_data.col_values(paramNamesCol)
 
-    paramsNames = ['WQFilename','normalLQTargetDate','flowFilename','flowUseCols','stdFlow',
-            'makeFlowGraphFlag','loadFlowTargetDate','nutLoadFilename']
+    paramsNames = ['WQFilename','normalLQTargetDate','flowFilename',
+            'flowUseCols','stdFlow',
+            'makeFlowGraphFlag','loadFlowTargetDate','nutLoadFilename',
+            'nutLoadSheetname']
 
     ## パラメータの取得
     ### パラメータの値が格納されている列
