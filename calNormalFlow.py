@@ -108,7 +108,7 @@ def execCalStdFlow(conditionExcelFilename, settingSheetName):
 
     flowFilename = params['flowFilename']
     flowUseCols = params['flowUseCols']
-    HeisuiOrHousui = params['HeisuiOrHousui']
+    HeisuiOrHousui = params['stdFlow']
     makeFlowGraphFlag = params['makeFlowGraphFlag']
     startDate = params['startDate']
     endDate = params['endDate']

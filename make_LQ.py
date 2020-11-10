@@ -537,7 +537,8 @@ if __name__ == '__main__':
     targetFlow = calNormalFlow.getTargetFlowForCalRainLQ(params)
 
     # 平常流量の読み取り
-    stdFlows = calNormalFlow.execCalStdFlow(conditionExcelFilename, settingSheetName)
+    if not params['stdFlow'] == 'obsMax':
+        stdFlows = calNormalFlow.execCalStdFlow(conditionExcelFilename, settingSheetName)
 
     # 負荷量を取得
     ## kg/日の単位で読み込むこと
@@ -562,10 +563,12 @@ if __name__ == '__main__':
         ## 最大流量・最小流量・切り替え流量を取得 
         maxFlow = thisTargetFlow.max()          # 最大流量
         minFlow = thisTargetFlow.min()          # 最小流量
-        changeFlow = stdFlows[thisTargetRiver]  # 切り替え流量
+        if not params['stdFlow'] == 'obsMax':
+            changeFlow = stdFlows[thisTargetRiver]  # 切り替え流量
+        else:
         ## 切り替え流量を観測値における最大流量とする方法
-        # obsMaxFlow = getObsMaxFlow(params, thisTargetRiver)
-        # changeFlow = obsMaxFlow
+            changeFlow = getObsMaxFlow(params, thisTargetRiver)
+
 
         ## 辞書型にしてパック
         thresFlows = {'maxFlow':maxFlow,'minFlow':minFlow,'changeFlow':changeFlow}
