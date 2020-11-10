@@ -328,203 +328,14 @@ def drawLQ(thresFlows, normalLQCoef, rainLQCoef, flowAndNutObs,
     return
 
 
-def main():
+def main(conditionExcelFilename):
     '''
-    TODO もともとのmainに相当する部分だが、これを関数にして可読性を上げる
+    L-Qを作成するための一連の操作の実行
+    conditionExcelFilenameに設定ファイル名を指定する
     '''
-    # L-Qの条件ファイル
-    condition_excel_file = './data/L-Q計算設定ファイル.xlsx'
-
-    # 設定を読み取る
-    ## 設定が記載されたシート
-    setting_sheet_name = '設定事項'
-    ## 設定事項のシートをオープン
-    setting_sheet = xlrd.open_workbook(condition_excel_file).\
-            sheet_by_name(setting_sheet_name)
-    ## 設定の読み取り
-    ### cellは(0,0)が左上のセルになる
-    params = {}
-    params['load_term'] = setting_sheet.cell(1,1).value # 負荷合計期間
-    params['file_WQ']   = setting_sheet.cell(2,1).value # 水質ファイル
-    params['norm_LQ_term'] = setting_sheet.cell(3,1).value # 平常時L-Q作成対象期間
-
-    # 処理対象河川の設定
-    target_river_sheet_name = '処理対象河川'
-    target_river_list = list(pd.read_excel(io=condition_excel_file,
-        sheet_name=target_river_sheet_name,skiprows=0)['対象河川'])
-
-    # 負荷のための流量合計期間の設定
-    load_term = params['load_term']
-    # 平常時水質L-Q作成期間
-    norm_LQ_term = params['norm_LQ_term']
-
-    # 栄養塩ループ用リスト
-    nut_list = ['COD','TN','TP']
-
-    ## for debug
-    #this_target_river = target_river_list[0]
-    #this_nut = nut_list[0]
-
-    # 流量の取得
-    ## 河川のデータの読み込み
-    river_sheet_name = '流量'
-    river_skiprows = 2
-    flow_pd = pd.read_excel(io=condition_excel_file,
-            sheet_name = river_sheet_name, skiprows = river_skiprows)
-
-    # 結果用の変数
-    res = dict()
-
-    for this_target_river in target_river_list:
-
-        ## 負荷のための流量合計期間に限定
-        flow_pd_limited = flow_pd[(flow_pd['Date'] >= load_term[0]) & (flow_pd['Date'] <= load_term[1])]
-        ## 対象河川の流量、最大流量、最小流量を取得
-        target_flow, max_flow, min_flow = flow_get(this_target_river,flow_pd_limited)
-
-        # 対応するブロックの取得
-        corres_block_sheet_name = 'ブロック対応'
-        corres_skiprows = 2
-        corres_pd = pd.read_excel(io=condition_excel_file,
-                sheet_name = corres_block_sheet_name, skiprows=corres_skiprows)
-        ## 対応するブロックのリストの取得
-        this_corres_block_list = corres_pd[this_target_river].iloc[0].split(',')
-
-        # 結果格納辞書に河川のキーを追加
-        res[this_target_river] = {}
-        print("河川:{0}".format(this_target_river))
-
-        for this_nut in nut_list:
-
-            print("項目:{0}".format(this_nut))
-            
-            # 負荷量の取得
-            # TODO ここは負荷量シート次第で変わりうるので注意
-            nut_block_sheet_name = this_nut + '負荷量'
-            block_sum_col = '計' # 負荷量合計の列名
-            nut_skiprows = 2
-
-            ## 負荷量のpdを作成。indexにブロックを指定
-            nut_block_pd = pd.read_excel(io=condition_excel_file,
-                    sheet_name = nut_block_sheet_name, skiprows = nut_skiprows, index_col=0)
-            this_nut_sum = 0.0
-            ## 対応ブロックの「計」を読み込んで加算
-            for this_corres_block in this_corres_block_list:
-                this_nut_sum += nut_block_pd.loc[this_corres_block,block_sum_col]
-            ## L-Q式の合計負荷量を入れる
-            ## 単位をg/year
-            ## 但しブロックの単位はkg/日なので、
-            ## 年に換算するため365を、kg->gのため1000を乗じる
-            #import pdb; pdb.set_trace()
-
-            # TODO 単位確認すること
-            Lsum_all = this_nut_sum * 365 * 1000
-
-            # 水質観測値の読み込み
-            # TODO ここも新しいファイルで変化しないか確認
-            obs_skiprows = 17
-            ## 観測値の読み込み。sheet_nameはtarget_riverと一致していることを想定
-            obs_pd = pd.read_excel(io=params['file_WQ'],sheet_name = this_target_river,
-                    skiprows = obs_skiprows)
-            ## シート上の列名とnutコードの対応を付ける
-            # TODO 新しいファイルでの列名の付け方との整合を取る
-            nut_col_on_obs_pd = {'COD':'COD','TN':'全窒素','TP':'全リン'}
-            this_nut_col_name = nut_col_on_obs_pd[this_nut]
-
-            ## 流量の列名
-            # TODO 新しいファイルの流量の列名が以下と一致しているか確認
-            #flowCol = '流量'
-
-            ## 平常時L-Q期間に限定
-            # TODO Dateの列を作成しているか確認
-            norm_LQ_limited = obs_pd[(obs_pd['Date'] >= norm_LQ_term[0]) & 
-                    (obs_pd['Date'] <= norm_LQ_term[1])]
-
-            ## 流量と濃度を抜き出す
-            flow_and_nut = norm_LQ_limited.loc[:,[flowCol,this_nut_col_name]]
-            ## 切り替え流量の取得(平常時観測値の最大値)
-            ## dropna()を行う前にすることで、対象期間中
-            ## 公共用水域観測が行われたことのある最大流量を設定している
-            ## TODO 切り替え流量は平水流量などで設定するので、引数に設定する
-            change_flow = flow_and_nut[flowCol].max()
-
-            ## 負荷量(g/s)を算出
-            flow_and_nut['load(g/s)'] = flow_and_nut[flowCol] * \
-                    flow_and_nut[this_nut_col_name]
-            flow_and_nut.dropna(how='any',inplace=True) # 欠測値を含む行を削除
-            this_load = flow_and_nut['load(g/s)']
-            this_flow = flow_and_nut[flowCol]
-            ## 回帰式を作成。logをとって1次式として扱う
-            this_x = np.log10(this_flow)
-            this_y = np.log10(this_load)
-            coefs = np.polyfit(this_x,this_y,1)
-            this_b = coefs[0]
-            this_a = 10**(coefs[1])
-            ## 結果の格納
-            normal_LQ_coef = { 'a' : this_a, 'b' : this_b }
-
-            ## 切り替え流量時の負荷(g/s)
-            change_L = this_a * change_flow ** this_b
-
-            # 平常時負荷量(g/year)の合計の取得
-            Lsum_norm = 0.0
-            ## 年間の内切り替え流量以下の流量を取得
-            target_flow_below_change_flow = target_flow[target_flow <= change_flow]
-            ## 平常時L-Q式を使用する。但しこの時g/sをg/hに変換するため3600を乗じる
-            for now_flow in target_flow_below_change_flow:
-                Lsum_norm += ( this_a * now_flow ** this_b ) * 3600
-
-            # 出水時L-Q式の取得
-            ## 出水時負荷量の取得(g/年)
-            Lsum_rain = Lsum_all - Lsum_norm
-            ## 出水時流量/change_flow
-            rain_flow_div = \
-                    target_flow[target_flow > change_flow] / change_flow
-
-            ## 左辺の残差項
-            residue = Lsum_rain / ( change_L * 3600 )
-
-            ## bの算出
-            rain_b = newton_sol(rain_flow_div, residue)
-
-            ## aの算出
-            rain_a = change_L / ( change_flow ** rain_b )
-            ## 格納
-            rain_LQ_coef = {'a' : rain_a, 'b' : rain_b }
-
-            check_LQ(target_flow, change_flow, normal_LQ_coef, rain_LQ_coef, Lsum_all)
-            #print('Lsum_norm : {0} g/year'.format(Lsum_norm ))
-            #print('Lsum_rain : {0} g/year'.format(Lsum_rain ))
-
-            
-
-            draw_LQ(change_flow, normal_LQ_coef, rain_LQ_coef,
-                    this_target_river, this_nut, flow_and_nut, min_flow, max_flow)
-    #        print('normal LQ a : {0}, b : {1}'.format(normal_LQ_coef['a'], normal_LQ_coef['b']))
-    #        print('rain LQ a : {0}, b : {1}'.format(rain_LQ_coef['a'], rain_LQ_coef['b']))
-
-            # 結果の格納
-            res[this_target_river][this_nut] = [normal_LQ_coef, rain_LQ_coef, 
-                    Lsum_all / 1000 ] 
-            res[this_target_river]['change_flow'] = change_flow
-            
-
-    # 結果の出力
-    output_res(target_river_list, nut_list, res)
 
     
-    
-
-
-
-
-
-if __name__ == '__main__':
-
-
     # 設定を読み取る
-    ## L-Qの条件ファイル
-    conditionExcelFilename = './data/L-Q計算設定ファイル.xlsx'
     ## 設定が記載されたシート
     settingSheetName = '設定事項'
     params = readParams.readParams(conditionExcelFilename, settingSheetName)
@@ -548,7 +359,7 @@ if __name__ == '__main__':
     # index=0は河川名
     # 使用する列は河川名、COD、TN、TPの4つの列とする
     nutLoadPd = pd.read_excel(nutLoadFilename,index_col=0, 
-            use_col=[0,1,2,3], sheet_name = nutLoadSheetname)
+            usecols=[0,1,2,3], sheet_name = nutLoadSheetname)
 
 
     ## for debug
@@ -611,3 +422,15 @@ if __name__ == '__main__':
             res.append(thisRiverRes)    # 出力
 
     output_res(targetRiverNames, nutList, res)
+    
+
+
+
+
+
+if __name__ == '__main__':
+
+    ## L-Qの条件ファイル
+    conditionExcelFilename = './data/L-Q計算設定ファイル.xlsx'
+
+    main(conditionExcelFilename)
