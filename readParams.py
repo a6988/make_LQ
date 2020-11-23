@@ -1,5 +1,7 @@
 import xlrd
 
+# 設定ファイルを読み込む
+
 def readParams(conditionExcelFilename:str,settingSheetName:str)->str:
     '''
     必要な設定を設定ファイルから読み込む

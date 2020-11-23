@@ -149,14 +149,18 @@ def output_res(targetRiverNames: list, nutList: list, res: dict) -> None:
     res_file = resDir + './res.csv'
     with open(res_file, "w",encoding="shift-jis") as f:
 
-        f.write('河川,項目,平常時a,平常時b,出水時a,出水時b,切替流量\n')
+        f.write('河川,項目,平常時a,平常時b,出水時a,出水時b,切替流量,'\
+                'LQ平常時負荷量(kg/日),LQ出水時負荷量(kg/日),'\
+                'LQ合計負荷量(kg/日),定量化負荷量(kg/日)\n')
 
         for thisRow in res:
 
-            f.write("{},{},{},{},{},{},{}\n".format(
+            f.write("{},{},{},{},{},{},{},{},{},{},{}\n".format(
                 thisRow['河川名'],thisRow['項目'],thisRow['平常時a'],
                 thisRow['平常時b'],thisRow['出水時a'],thisRow['出水時b'],
-                thisRow['切替流量']))
+                thisRow['切替流量'],thisRow['LQ平常時負荷量(kg/日)'],
+                thisRow['LQ出水時負荷量(kg/日)'],thisRow['LQ合計負荷量(kg/日)'],
+                thisRow['定量化負荷量(kg/日)']))
 
 
 def newton_sol(rain_flow_div : pd.Series, residue : float) -> None:
@@ -207,7 +211,9 @@ def check_LQ(target_flow : pd.Series, change_flow : float,
     normal_load_sr = ( normal_LQ_coef['a'] * 
             normal_flow ** normal_LQ_coef['b'] ) * 3600
     normal_sum = normal_load_sr.sum() # g/year 
-    print('normal_sum : {0} kg/日'.format(normal_sum/1000/365))
+    # 単位変換(g/year -> kg/日)
+    normal_sum = round(normal_sum/1000/365,3)
+    print('normal_sum : {0} kg/日'.format(normal_sum))
 
     # 出水時の解が求まった場合
     if not rain_LQ_coef['b'] == None:
@@ -217,18 +223,34 @@ def check_LQ(target_flow : pd.Series, change_flow : float,
                 rain_flow ** rain_LQ_coef['b'] ) * 3600
         rain_sum = rain_load_sr.sum() # g/year 
 
-        # L-Q式から算出した合計流出負荷量(kg/year)
+        # L-Q式から算出した合計流出負荷量(g/year)
         all_sum = normal_sum + rain_sum
 
-        print('rain_sum : {0} kg/日'.format(rain_sum/1000/365))
-        print('L-Qから算出した流出負荷量は{0}kg/日です.'.format(
-            round(all_sum/1000/365),3))
+        # 単位変換(g/year -> kg/日)
+        rain_sum = round(rain_sum/1000/365,3)
+        all_sum = normal_sum + rain_sum
+
+
+        print('rain_sum : {0} kg/日'.format(rain_sum))
+        print('L-Qから算出した流出負荷量は{0}kg/日です.'.format(all_sum))
     # 求まらなかった場合
     else:
+        rain_sum = None
+        all_sum = None
         print('出水時計算失敗')
 
-    print('設定したブロック負荷量は{0}kg/日です.'.format(
-        round(Lsum_all/1000/365,3)))
+    # 単位変換
+    Lsum_all = round(Lsum_all/1000/365,3)
+    print('設定したブロック負荷量は{0}kg/日です.'.format(Lsum_all))
+    # LQ及び定量化結果の負荷量を算出
+
+    loadRes = {'LQ平常時負荷量(kg/日)':normal_sum,
+            'LQ出水時負荷量(kg/日)':rain_sum,
+            'LQ合計負荷量(kg/日)':all_sum,
+            '定量化負荷量(kg/日)':Lsum_all}
+
+
+    return loadRes
 
 def drawLQNormal(ax, thresFlows, normalLQCoef, flowAndNutObs,
         thisTargetRiver, thisNut):
@@ -405,7 +427,7 @@ def main(conditionExcelFilename):
             pprint.pprint(rainLQCoef)
     
             # LQから算出した負荷量と設定値が合致するかの確認
-            check_LQ(thisTargetFlow, thresFlows['changeFlow'], 
+            loadRes = check_LQ(thisTargetFlow, thresFlows['changeFlow'], 
                     normalLQCoef, rainLQCoef, allLoadSum)
 
             # 描画
@@ -418,7 +440,13 @@ def main(conditionExcelFilename):
                     '平常時b':normalLQCoef['b'],
                     '出水時a':rainLQCoef['a'],
                     '出水時b':rainLQCoef['b'],
-                    '切替流量':changeFlow}
+                    '切替流量':changeFlow,
+                    'LQ平常時負荷量(kg/日)':loadRes['LQ平常時負荷量(kg/日)'],
+                    'LQ出水時負荷量(kg/日)':loadRes['LQ出水時負荷量(kg/日)'],
+                    'LQ合計負荷量(kg/日)':loadRes['LQ合計負荷量(kg/日)'],
+                    '定量化負荷量(kg/日)':loadRes['定量化負荷量(kg/日)'],
+
+                    }
             res.append(thisRiverRes)    # 出力
 
     output_res(targetRiverNames, nutList, res)

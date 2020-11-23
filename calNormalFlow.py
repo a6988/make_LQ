@@ -4,6 +4,9 @@ import datetime as dt
 import xlrd
 import readParams
 
+# 平水流量及び豊水流量を算出する
+# L-Q設定ファイルに平水流量か豊水流量かを記載する
+
 def getTargetFlow(flowFilename:str, thisUsecols:str,
         startDayStr:str, endDayStr:str)->pd.DataFrame:
     '''
